@@ -1,0 +1,4 @@
+# file: C:\Users\yuvra\Downloads\OpenEnv environment\project\env\tasks.py
+# hypothesis_version: 6.151.11
+
+['billing', 'escalate', 'general', 'high', 'low', 'medium', 'normal', 'premium', 'reply', 'request_info', 'task_easy', 'task_hard', 'task_medium', 'technical']

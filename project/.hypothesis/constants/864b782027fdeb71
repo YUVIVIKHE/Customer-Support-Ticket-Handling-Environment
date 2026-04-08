@@ -1,0 +1,4 @@
+# file: C:\Users\yuvra\Downloads\OpenEnv environment\project\env\environment.py
+# hypothesis_version: 6.151.11
+
+[-0.2, 0.0, 0.1, 0.3, 1.0, 'action_history', 'classify', 'done', 'fast_resolution', 'initialized', 'loop_penalty', 'priority', 'response_action', 'rewards_per_step', 'step_count', 'task_name', 'total_reward', 'wrong_action_penalty']
