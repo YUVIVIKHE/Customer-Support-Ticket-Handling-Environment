@@ -22,11 +22,14 @@ class Action(BaseModel):
 
 
 class Reward(BaseModel):
-    """Reward signal returned after each environment step."""
+    """Structured reward signal returned after each environment step.
+
+    score     — final clamped value in [0.0, 1.0]
+    breakdown — per-component contributions for interpretability
+    """
 
     score: float
     breakdown: dict[str, float]
-    done: bool
 
     @field_validator("score")
     @classmethod

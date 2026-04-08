@@ -1,6 +1,7 @@
 """Stateful Customer Support Ticket Environment.
 
-Implements the OpenEnv interface: reset(), step(), state().
+Implements the OpenEnv interface: reset(), step(action), state().
+step() returns a 4-tuple: (observation, reward, done, info)
 """
 
 import json
@@ -25,7 +26,7 @@ class CustomerSupportEnv:
         self._initialized: bool = False
 
     # ------------------------------------------------------------------
-    # Public interface
+    # Public OpenEnv interface
     # ------------------------------------------------------------------
 
     def reset(self, task_name: str) -> Observation:
@@ -49,14 +50,15 @@ class CustomerSupportEnv:
         self._initialized = True
         return self._task.initial_observation
 
-    def step(self, action: Action) -> tuple[Observation, Reward, bool]:
+    def step(self, action: Action) -> tuple[Observation, Reward, bool, dict]:
         """Advance the episode by one step.
 
         Args:
             action: The agent's action for this step.
 
         Returns:
-            (next_observation, reward, done)
+            (next_observation, reward, done, info)
+            info contains reward_breakdown and step_count.
 
         Raises:
             RuntimeError: If called before reset() or after episode is done.
@@ -80,7 +82,7 @@ class CustomerSupportEnv:
             else self._task.expected_actions[-1]
         )
 
-        # Compute reward
+        # Compute structured reward
         reward = self._compute_reward(action, expected)
 
         # Record action
@@ -96,7 +98,7 @@ class CustomerSupportEnv:
         )
         self._done = done
 
-        # Build next observation (append action to previous_actions)
+        # Build next observation (append serialized action to previous_actions)
         next_obs = Observation(
             ticket_text=self._task.initial_observation.ticket_text,
             customer_type=self._task.initial_observation.customer_type,
@@ -106,12 +108,13 @@ class CustomerSupportEnv:
             ],
         )
 
-        reward = Reward(
-            score=reward.score,
-            breakdown=reward.breakdown,
-            done=done,
-        )
-        return next_obs, reward, done
+        # info dict — always a plain JSON-serializable dict
+        info: dict = {
+            "reward_breakdown": reward.breakdown,
+            "step_count": self._step_count,
+        }
+
+        return next_obs, reward, done, info
 
     def state(self) -> dict:
         """Return a JSON-serializable snapshot of the current episode state."""
@@ -132,16 +135,16 @@ class CustomerSupportEnv:
     # ------------------------------------------------------------------
 
     def _compute_reward(self, action: Action, expected: Action) -> Reward:
-        """Compute per-step reward with breakdown.
+        """Compute per-step reward with full breakdown.
 
-        Scoring:
-          +0.3  correct classify_ticket
-          +0.3  correct priority
-          +0.3  correct response_action
-          +0.1  fast resolution (step_count < expected_steps)
-          -0.2  wrong response_action
-          -0.2  loop penalty (last 3 actions identical)
-        Clamped to [0.0, 1.0].
+        Components:
+          classify  +0.3  correct classify_ticket
+          priority  +0.3  correct priority
+          response  +0.3  correct response_action
+          speed_bonus +0.1  step within expected_steps threshold
+          penalty   -0.2  wrong response_action
+          penalty   -0.2  loop (last 3 actions identical)
+        Final score clamped to [0.0, 1.0].
         """
         assert self._task is not None
         breakdown: dict[str, float] = {}
@@ -150,25 +153,27 @@ class CustomerSupportEnv:
         priority_ok = action.priority == expected.priority
         response_ok = action.response_action == expected.response_action
 
+        # Core correctness components
         breakdown["classify"] = 0.3 if classify_ok else 0.0
         breakdown["priority"] = 0.3 if priority_ok else 0.0
-        breakdown["response_action"] = 0.3 if response_ok else 0.0
+        breakdown["response"] = 0.3 if response_ok else 0.0
 
-        # Fast-resolution bonus: step index (0-based) < expected_steps
+        # Speed bonus: reward early correct decisions
         fast = self._step_count < self._task.expected_steps
-        breakdown["fast_resolution"] = 0.1 if fast else 0.0
+        breakdown["speed_bonus"] = 0.1 if fast else 0.0
 
-        # Wrong action penalty
-        breakdown["wrong_action_penalty"] = -0.2 if not response_ok else 0.0
+        # Penalty: wrong response action
+        breakdown["penalty"] = -0.2 if not response_ok else 0.0
 
         # Loop penalty: last 3 actions (including current) all identical
-        recent = self._action_history[-(2):] + [action]  # last 2 + current
-        if len(recent) == 3 and len(set(a.model_dump_json() for a in recent)) == 1:
-            breakdown["loop_penalty"] = -0.2
-        else:
-            breakdown["loop_penalty"] = 0.0
+        recent = self._action_history[-2:] + [action]
+        if (
+            len(recent) == 3
+            and len(set(a.model_dump_json() for a in recent)) == 1
+        ):
+            breakdown["penalty"] = min(breakdown["penalty"] - 0.2, -0.2)
 
         raw_score = sum(breakdown.values())
         clamped = max(0.0, min(1.0, raw_score))
 
-        return Reward(score=clamped, breakdown=breakdown, done=False)
+        return Reward(score=clamped, breakdown=breakdown)

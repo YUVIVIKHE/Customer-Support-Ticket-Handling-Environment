@@ -1,9 +1,10 @@
 """Task definitions for the Customer Support Ticket Environment.
 
 All tasks are fully deterministic — no randomness is used.
+Ticket texts use realistic, noisy real-world language.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from env.models import Action, Observation
 
@@ -13,25 +14,28 @@ class TaskDefinition:
     """Describes a single evaluation task."""
 
     name: str
+    difficulty: str                 # "easy" | "medium" | "hard"
     initial_observation: Observation
     expected_actions: list[Action]  # ground truth per step
-    expected_steps: int             # steps threshold for fast-resolution bonus
+    expected_steps: int             # steps threshold for speed bonus
     max_steps: int                  # hard episode limit
 
 
 # ---------------------------------------------------------------------------
-# Task Easy: single-step refund ticket
+# Task Easy: single-step refund ticket (noisy real-world text)
 # ---------------------------------------------------------------------------
 
 _TASK_EASY = TaskDefinition(
     name="task_easy",
+    difficulty="easy",
     initial_observation=Observation(
-        ticket_text="I want a refund for my last order.",
+        ticket_text="plz refund asap!!! i got charged and never received my order",
         customer_type="normal",
         urgency_level="medium",
         previous_actions=[],
     ),
     expected_actions=[
+        # Correct: billing issue → medium priority → reply to customer
         Action(
             classify_ticket="billing",
             priority="medium",
@@ -43,28 +47,35 @@ _TASK_EASY = TaskDefinition(
 )
 
 # ---------------------------------------------------------------------------
-# Task Medium: multi-step internet outage ticket
+# Task Medium: multi-step internet outage (noisy real-world text)
 # ---------------------------------------------------------------------------
 
 _TASK_MEDIUM = TaskDefinition(
     name="task_medium",
+    difficulty="medium",
     initial_observation=Observation(
-        ticket_text="My internet is down and I've tried restarting the router.",
+        ticket_text=(
+            "internet not working since morning idk what to do "
+            "i tried restarting everything still nothing"
+        ),
         customer_type="premium",
         urgency_level="high",
         previous_actions=[],
     ),
     expected_actions=[
+        # Step 1: ask for more diagnostic info before acting
         Action(
             classify_ticket="technical",
             priority="high",
             response_action="request_info",
         ),
+        # Step 2: provide solution after gathering info
         Action(
             classify_ticket="technical",
             priority="high",
             response_action="reply",
         ),
+        # Step 3: confirm resolution
         Action(
             classify_ticket="technical",
             priority="high",
@@ -76,37 +87,38 @@ _TASK_MEDIUM = TaskDefinition(
 )
 
 # ---------------------------------------------------------------------------
-# Task Hard: multi-ticket queue with prioritization
-# Each entry in expected_actions corresponds to one ticket in the queue.
-# The agent must handle them in priority order: high → medium → low.
+# Task Hard: multi-ticket queue with prioritization (noisy real-world text)
+# Agent must handle tickets in priority order: high → medium → low
 # ---------------------------------------------------------------------------
 
 _TASK_HARD = TaskDefinition(
     name="task_hard",
+    difficulty="hard",
     initial_observation=Observation(
         ticket_text=(
-            "QUEUE: [1] 'My account was charged twice.' (normal, high) | "
-            "[2] 'How do I reset my password?' (normal, low) | "
-            "[3] 'The app crashes on startup.' (premium, medium)"
+            "QUEUE: "
+            "[1] 'charged twice ??? fix this NOW' (normal, high) | "
+            "[2] 'how do i reset password i forgot it' (normal, low) | "
+            "[3] 'app keeps crashing on startup every time' (premium, medium)"
         ),
         customer_type="normal",
         urgency_level="high",
         previous_actions=[],
     ),
     expected_actions=[
-        # Ticket 1: billing, high urgency → escalate
+        # Ticket 1 first: billing, high urgency → escalate (double charge)
         Action(
             classify_ticket="billing",
             priority="high",
             response_action="escalate",
         ),
-        # Ticket 3: technical, medium urgency → reply (premium customer)
+        # Ticket 3 second: technical, medium urgency → reply (premium customer)
         Action(
             classify_ticket="technical",
             priority="medium",
             response_action="reply",
         ),
-        # Ticket 2: general, low urgency → reply
+        # Ticket 2 last: general, low urgency → reply
         Action(
             classify_ticket="general",
             priority="low",

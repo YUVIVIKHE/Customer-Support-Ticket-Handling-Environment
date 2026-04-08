@@ -3,7 +3,7 @@
 Reads API_BASE_URL, MODEL_NAME, HF_TOKEN from environment variables.
 Runs all three tasks sequentially and prints structured logs.
 
-Log format:
+Log format (EXACT — do not modify):
   [START] task=<task_name> env=<env_name> model=<model_name>
   [STEP] step=<n> action=<action_json> reward=<0.00> done=<true|false> error=<msg|null>
   [END] success=<true|false> steps=<n> score=<0.00> rewards=<r1,r2,...>
@@ -13,14 +13,14 @@ import json
 import os
 import sys
 
-# Allow running as a script from the project root
+# Allow running as `python -m env.inference` from project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from openai import OpenAI
 from pydantic import ValidationError
 
 from env.environment import CustomerSupportEnv
-from env.models import Action, Observation
+from env.models import Action, Observation, Reward
 
 # ---------------------------------------------------------------------------
 # Configuration from environment variables
@@ -34,6 +34,7 @@ ENV_NAME = CustomerSupportEnv.ENV_NAME
 
 TASK_NAMES = ["task_easy", "task_medium", "task_hard"]
 
+# Fallback action used when LLM output cannot be parsed
 DEFAULT_ACTION = Action(
     classify_ticket="general",
     priority="low",
@@ -104,19 +105,22 @@ def run_task(client: OpenAI, task_name: str) -> None:
         step_n += 1
         action, error = call_llm(client, obs)
 
-        obs, reward, done = env.step(action)
-        rewards.append(reward.score)
+        # step() now returns 4-tuple: (obs, reward, done, info)
+        obs, reward, done, info = env.step(action)
+
+        # Extract scalar score from Reward object
+        reward_value = reward.score if isinstance(reward, Reward) else float(reward)
+        rewards.append(reward_value)
 
         error_str = error if error is not None else "null"
         done_str = "true" if done else "false"
         print(
             f"[STEP] step={step_n} action={action.model_dump_json()} "
-            f"reward={reward.score:.2f} done={done_str} error={error_str}"
+            f"reward={reward_value:.2f} done={done_str} error={error_str}"
         )
 
     final_state = env.state()
     total_score = final_state["total_reward"]
-    # Normalize total score to [0, 1] by averaging
     avg_score = total_score / step_n if step_n > 0 else 0.0
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     success = avg_score >= 0.5

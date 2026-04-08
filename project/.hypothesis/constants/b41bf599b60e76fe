@@ -1,4 +1,0 @@
-# file: C:\Users\yuvra\Downloads\OpenEnv environment\project\env\models.py
-# hypothesis_version: 6.151.11
-
-[0.0, 1.0, 'billing', 'complaint', 'escalate', 'general', 'high', 'ignore', 'low', 'medium', 'normal', 'premium', 'reply', 'request_info', 'score', 'technical']

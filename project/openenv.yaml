@@ -4,6 +4,7 @@ description: >
   An OpenEnv-compliant reinforcement learning environment that simulates
   a customer support agent handling incoming tickets. The agent must classify
   tickets, assign priority, and choose the correct response action.
+  Designed for benchmarking LLMs on real-world customer support automation.
 
 reward_range:
   - 0.0
@@ -14,7 +15,7 @@ observation_space:
   properties:
     ticket_text:
       type: string
-      description: The raw text of the customer support ticket.
+      description: Raw text of the customer support ticket (may be noisy/informal).
     customer_type:
       type: string
       enum: [premium, normal]
@@ -47,20 +48,23 @@ action_space:
 
 tasks:
   - name: task_easy
+    difficulty: easy
     description: >
-      Single-step scenario. The agent receives a simple ticket (e.g., refund request)
-      and must correctly classify it and choose the right response action.
+      Single-step scenario. The agent receives a simple noisy refund request
+      and must correctly classify it as billing and respond with reply.
     max_steps: 3
     expected_steps: 1
 
   - name: task_medium
+    difficulty: medium
     description: >
       Multi-step scenario. The agent handles an internet outage ticket across
-      three steps: request more info, reply, then resolve.
+      three steps: request more info, reply with solution, then confirm resolution.
     max_steps: 6
     expected_steps: 3
 
   - name: task_hard
+    difficulty: hard
     description: >
       Multi-ticket queue scenario. The agent must handle three tickets in
       priority order (high → medium → low) with correct classification and actions.
@@ -72,10 +76,10 @@ server:
   endpoints:
     - method: POST
       path: /reset
-      description: Initialize a new episode.
+      description: Initialize a new episode. Returns initial Observation.
     - method: POST
       path: /step
-      description: Advance the episode by one step.
+      description: Advance one step. Returns observation, reward, done, info.
     - method: GET
       path: /state
       description: Inspect current episode state.
